@@ -6,6 +6,8 @@
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/ashbythorpe/selenium-r/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ashbythorpe/selenium-r/actions/workflows/R-CMD-check.yaml)
+[![CRAN
+status](https://www.r-pkg.org/badges/version/selenium)](https://CRAN.R-project.org/package=selenium)
 <!-- badges: end -->
 
 selenium is a tool for the automation of web browsers. It is a low-level
@@ -103,7 +105,7 @@ By default, this will connect to Firefox, but you can use the `browser`
 argument to specify a different browser if you like.
 
 ``` r
-session <- SeleniumSession$new()
+session <- SeleniumSession$new(browser = "chrome")
 ```
 
 Here, we use the `capabilities` argument to specify options for the
@@ -125,8 +127,6 @@ session <- SeleniumSession$new(
 If this doesn’t work, please see the [Debugging
 Selenium](https://ashbythorpe.github.io/selenium-r/articles/debugging.html)
 article for more information.
-
-<!-- TODO: Make this vignette --->
 
 ## Usage
 
@@ -154,7 +154,7 @@ session$close()
 
 For a more detailed introduction to using selenium, see the [Getting
 Started](https://ashbythorpe.github.io/selenium-r/articles/selenium.html)
-article. <!-- TODO: Make this vignette --->
+article.
 
 Note that selenium is low-level and mainly aimed towards developers. If
 you are wanting to use browser automation for web scraping or testing,

@@ -8,11 +8,10 @@ selenium_server(
   version = "latest",
   selenium_manager = TRUE,
   interactive = TRUE,
+  verbose = TRUE,
   temp = TRUE,
   path = NULL,
   echo_cmd = FALSE,
-  stdout = NULL,
-  stderr = NULL,
   extra_args = c()
 )
 }
@@ -28,6 +27,9 @@ will be prompted to confirm that you want to download it, and the function
 will error if \code{\link[rlang:is_interactive]{rlang::is_interactive()}} returns \code{FALSE}. To allow this
 function to work in a non-interactive setting, set this to \code{FALSE}.}
 
+\item{verbose}{Passed into \code{\link[utils:download.file]{utils::download.file()}}. Note that setting this
+to \code{FALSE} will \emph{not} disable the prompt if a file needs to be downloaded.}
+
 \item{temp}{Whether to use a temporary directory to download the Selenium
 Server \code{.jar} file. This will ensure that the file is deleted after it is
 used, but means that you will have to redownload the file with every new
@@ -36,8 +38,7 @@ R session. If \code{FALSE}, the file is saved in your user data directory.}
 \item{path}{The path where the downloaded Selenium Server \code{.jar} file will
 be saved. Overrides \code{temp}.}
 
-\item{echo_cmd, stdout, stderr}{Passed into
-\link[processx:process]{processx::process$new()}.}
+\item{echo_cmd}{Passed into \link[processx:process]{processx::process$new()}.}
 
 \item{extra_args}{A character vector of extra arguments to pass into the
 Selenium Server call.}

@@ -14,6 +14,15 @@ SeleniumSession <- R6::R6Class(
     #' @field id The id of the session, generated when the session is started.
     id = NULL,
 
+    #' @field browser The browser that the session is using.
+    browser = NULL,
+
+    #' @field port The port that the session is using.
+    port = NULL,
+
+    #' @field host The host that the session is running on.
+    host = NULL,
+
     #' @description
     #' Create a Selenium session: opening a browser which can be controlled by
     #' the Selenium client.
@@ -30,6 +39,8 @@ SeleniumSession <- R6::R6Class(
     #'   server, to combine with the defaults generated using `browser`.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server. Overrides `capabilities`.
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A `SeleniumSession` object.
     #'
@@ -45,7 +56,8 @@ SeleniumSession <- R6::R6Class(
       host = "localhost",
       verbose = FALSE,
       capabilities = NULL,
-      request_body = NULL
+      request_body = NULL,
+      timeout = 20
     ) {
       check_string(browser)
       check_number_whole(port)
@@ -53,6 +65,7 @@ SeleniumSession <- R6::R6Class(
       check_bool(verbose)
       check_list(capabilities, allow_null = TRUE)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       opts <- switch(browser,
         firefox = list(
@@ -84,10 +97,13 @@ SeleniumSession <- R6::R6Class(
 
       req <- req_body_selenium(req, body, request_body = request_body)
 
-      result <- req_perform_selenium(req, verbose = private$verbose)
+      result <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       result_r <- httr2::resp_body_json(result)
 
       self$id <- result_r$value$sessionId
+      self$browser <- browser
+      self$port <- port
+      self$host <- host
     },
 
     #' @description
@@ -141,6 +157,9 @@ SeleniumSession <- R6::R6Class(
     #' Close the current session. Once a session is closed, its methods will
     #' no longer work. However, the Selenium server will still be running.
     #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
+    #'
     #' @return The session object, invisibly.
     #'
     #' @examples
@@ -149,9 +168,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    close = function() {
+    close = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Delete Session", session_id = self$id)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
 
@@ -161,6 +182,9 @@ SeleniumSession <- R6::R6Class(
     #' even after [SeleniumSession$close()][SeleniumSession] is called). It is
     #' identical to [get_server_status()], but uses the host, port and verbose
     #' options passed to the session, for convenience.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A list that can (but may not always) contain the following
     #'   fields:
@@ -181,7 +205,9 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$status()
     #' }
-    status = function() {
+    status = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       get_status(private$req, private$verbose)
     },
 
@@ -197,6 +223,9 @@ SeleniumSession <- R6::R6Class(
     #'    elements to be located, or for elements to become interactable when
     #'    required. Defaults to 0 seconds.
     #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
+    #'
     #' @return A list with three items: `script`, `page_load`, and `implicit`.
     #'
     #' @examples
@@ -208,9 +237,10 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    get_timeouts = function() {
+    get_timeouts = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
       req <- req_command(private$req, "Get Timeouts", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
 
@@ -225,6 +255,8 @@ SeleniumSession <- R6::R6Class(
     #'   page.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -238,11 +270,12 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    set_timeouts = function(script = NULL, page_load = NULL, implicit_wait = NULL, request_body = NULL) {
+    set_timeouts = function(script = NULL, page_load = NULL, implicit_wait = NULL, request_body = NULL, timeout = 20) {
       check_number_decimal(script, allow_null = TRUE)
       check_number_decimal(page_load, allow_null = TRUE)
       check_number_decimal(implicit_wait, allow_null = TRUE)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Set Timeouts", session_id = self$id)
       body <- compact(list(
@@ -256,7 +289,7 @@ SeleniumSession <- R6::R6Class(
       }
 
       req <- req_body_selenium(req, body, request_body = request_body)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
       invisible(self)
     },
@@ -267,6 +300,8 @@ SeleniumSession <- R6::R6Class(
     #'   'https://').
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request.
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -278,17 +313,21 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    navigate = function(url, request_body = NULL) {
+    navigate = function(url, request_body = NULL, timeout = 20) {
       check_string(url)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Navigate To", session_id = self$id)
       req <- req_body_selenium(req, list(url = url), request_body = request_body)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Get the current URL.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The URL of the current page.
     #'
@@ -302,14 +341,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    current_url = function() {
+    current_url = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Current URL", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
 
     #' @description
     #' Go back in the navigation history.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -327,15 +371,20 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    back = function() {
+    back = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Back", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
 
     #' @description
     #' Go forward in the navigation history.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -355,15 +404,20 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    forward = function() {
+    forward = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Forward", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
 
     #' @description
     #' Reload the current page.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -377,14 +431,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    refresh = function() {
+    refresh = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Refresh", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Get the title of the current page.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The title of the current page.
     #'
@@ -398,13 +457,18 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    title = function() {
+    title = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Title", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
     #' Get the current window handle.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The handle of the current window (a string).
     #'
@@ -416,13 +480,18 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    window_handle = function() {
+    window_handle = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Window Handle", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
     #' Close the current window.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -436,9 +505,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    close_window = function() {
+    close_window = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Close Window", session_id = self$id)
-      resp <- req_perform_selenium(req, verbose = private$verbose)
+      resp <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(resp)$value
     },
     #' @description
@@ -447,6 +518,8 @@ SeleniumSession <- R6::R6Class(
     #' @param handle The handle of the window to switch to.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -464,17 +537,21 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    switch_to_window = function(handle, request_body = NULL) {
+    switch_to_window = function(handle, request_body = NULL, timeout = 20) {
       check_string(handle)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Switch To Window", session_id = self$id)
       req <- req_body_selenium(req, list(handle = handle), request_body = request_body)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Get the handles of all open windows.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The handles of all open windows (a list of strings).
     #'
@@ -486,9 +563,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    window_handles = function() {
+    window_handles = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Window Handles", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
@@ -498,6 +577,8 @@ SeleniumSession <- R6::R6Class(
     #' @param type Whether to create a tab or a window.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A list containing two elements:
     #'
@@ -514,13 +595,14 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    new_window = function(type = c("tab", "window"), request_body = NULL) {
+    new_window = function(type = c("tab", "window"), request_body = NULL, timeout = 20) {
       type <- rlang::arg_match(type)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "New Window", session_id = self$id)
       req <- req_body_selenium(req, list(type = type), request_body = request_body)
-      resp <- req_perform_selenium(req, verbose = private$verbose)
+      resp <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(resp)$value
     },
     #' @description
@@ -535,6 +617,8 @@ SeleniumSession <- R6::R6Class(
     #'   element will be switched to.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -548,8 +632,9 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    switch_to_frame = function(id = NA, request_body = NULL) {
+    switch_to_frame = function(id = NA, request_body = NULL, timeout = 20) {
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       if (inherits(id, "WebElement")) {
         id <- id$toJSON()
@@ -559,11 +644,14 @@ SeleniumSession <- R6::R6Class(
 
       req <- req_command(private$req, "Switch To Frame", session_id = self$id)
       req <- req_body_selenium(req, list(id = id), request_body = request_body)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Switch to the parent frame of the current frame.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -579,14 +667,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    switch_to_parent_frame = function() {
+    switch_to_parent_frame = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Switch To Parent Frame", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Get the size and position of the current window.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A list containing four elements:
     #'
@@ -603,9 +696,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    get_window_rect = function() {
+    get_window_rect = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Window Rect", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
@@ -617,6 +712,8 @@ SeleniumSession <- R6::R6Class(
     #' @param y The y position of the window relative to the top of the screen.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -630,12 +727,13 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    set_window_rect = function(width = NULL, height = NULL, x = NULL, y = NULL, request_body = NULL) {
+    set_window_rect = function(width = NULL, height = NULL, x = NULL, y = NULL, request_body = NULL, timeout = 20) {
       check_number_decimal(width, min = 0)
       check_number_decimal(height, min = 0)
       check_number_decimal(x)
       check_number_decimal(y)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Set Window Rect", session_id = self$id)
       body <- compact(list(
@@ -650,12 +748,15 @@ SeleniumSession <- R6::R6Class(
       }
 
       req <- req_body_selenium(req, body, request_body = request_body)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
     #' Maximize the current window. This makes the window the maximum size it
-    #' can be, without being full screen
+    #' can be, without being full screen.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -667,14 +768,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    maximize_window = function() {
+    maximize_window = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Maximize Window", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      resp <- req_perform_selenium(req, verbose = private$verbose)
+      resp <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(resp)$value
     },
     #' @description
     #' Minimize the current window. This hides the window.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -686,14 +792,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    minimize_window = function() {
+    minimize_window = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Minimize Window", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      resp <- req_perform_selenium(req, verbose = private$verbose)
+      resp <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(resp)$value
     },
     #' @description
     #' Make the window full screen.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -705,14 +816,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    fullscreen_window = function() {
+    fullscreen_window = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Fullscreen Window", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      resp <- req_perform_selenium(req, verbose = private$verbose)
+      resp <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(resp)$value
     },
     #' @description
     #' Get the currently active element.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A [WebElement] object.
     #'
@@ -726,9 +842,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    get_active_element = function() {
+    get_active_element = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Active Element", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       id <- httr2::resp_body_json(response)$value
       self$create_webelement(id[[1]])
     },
@@ -739,6 +857,8 @@ SeleniumSession <- R6::R6Class(
     #' @param value The value of the selector: a string.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A [WebElement] object.
     #'
@@ -755,14 +875,15 @@ SeleniumSession <- R6::R6Class(
     #' session$close()
     #' }
     find_element = function(using = c("css selector", "xpath", "tag name", "link text", "partial link text"),
-                            value, request_body = NULL) {
+                            value, request_body = NULL, timeout = 20) {
       using <- rlang::arg_match(using)
       check_string(value)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Find Element", session_id = self$id)
       req <- req_body_selenium(req, list(using = using, value = value), request_body = request_body)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       id <- httr2::resp_body_json(response)$value
       self$create_webelement(id[[1]])
     },
@@ -773,6 +894,8 @@ SeleniumSession <- R6::R6Class(
     #' @param value The value of the selector: a string.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A list of [WebElement] objects.
     #'
@@ -789,19 +912,23 @@ SeleniumSession <- R6::R6Class(
     #' session$close()
     #' }
     find_elements = function(using = c("css selector", "xpath", "tag name", "link text", "partial link text"),
-                             value, request_body = NULL) {
+                             value, request_body = NULL, timeout = 20) {
       using <- rlang::arg_match(using)
       check_string(value)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Find Elements", session_id = self$id)
       req <- req_body_selenium(req, list(using = using, value = value), request_body = request_body)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       ids <- httr2::resp_body_json(response)$value
       lapply(ids, function(x) self$create_webelement(x[[1]]))
     },
     #' @description
     #' Get the HTML source of the current page, serialized as a string.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A string.
     #'
@@ -815,9 +942,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    get_page_source = function() {
+    get_page_source = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Page Source", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
@@ -830,6 +959,8 @@ SeleniumSession <- R6::R6Class(
     #' objects or lists of such objects, which will be converted to nodes.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The return value of the script. Nodes or lists of nodes will
     #'   be converted to [WebElement] objects.
@@ -848,16 +979,17 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    execute_script = function(x, ..., request_body = NULL) {
+    execute_script = function(x, ..., request_body = NULL, timeout = 20) {
       check_string(x)
       check_dots_unnamed()
       args <- rlang::list2(...)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       args <- prepare_for_json(args)
       req <- req_command(private$req, "Execute Script", session_id = self$id)
       req <- req_body_selenium(req, list(script = x, args = args), request_body = request_body)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       parse_json_result(httr2::resp_body_json(response)$value, self)
     },
     #' @description
@@ -874,6 +1006,8 @@ SeleniumSession <- R6::R6Class(
     #' to nodes.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The return value of the script. Nodes or lists of nodes will
     #'   be converted to [WebElement] objects.
@@ -889,20 +1023,24 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    execute_async_script = function(x, ..., request_body = NULL) {
+    execute_async_script = function(x, ..., request_body = NULL, timeout = 20) {
       check_string(x)
       check_dots_unnamed()
       args <- rlang::list2(...)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       args <- prepare_for_json(args)
       req <- req_command(private$req, "Execute Async Script", session_id = self$id)
       req <- req_body_selenium(req, list(script = x, args = args), request_body = request_body)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       parse_json_result(httr2::resp_body_json(response)$value, self)
     },
     #' @description
     #' Get all cookies.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return A list of cookies. Each cookie is a list with a `name` and
     #'   `value` field, along with some other optional fields.
@@ -917,9 +1055,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    get_cookies = function() {
+    get_cookies = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get All Cookies", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
@@ -928,6 +1068,8 @@ SeleniumSession <- R6::R6Class(
     #' @param name The name of the cookie.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The cookie object.
     #'
@@ -943,12 +1085,13 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    get_cookie = function(name, request_body = NULL) {
+    get_cookie = function(name, request_body = NULL, timeout = 20) {
       check_string(name)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Get Named Cookie", session_id = self$id, name = name)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
@@ -958,6 +1101,8 @@ SeleniumSession <- R6::R6Class(
     #'   `name` and `value` field.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -971,13 +1116,14 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    add_cookie = function(cookie, request_body = NULL) {
+    add_cookie = function(cookie, request_body = NULL, timeout = 20) {
       check_list(cookie)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Add Cookie", session_id = self$id)
       req <- req_body_selenium(req, list(cookie = cookie), request_body = request_body)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
@@ -986,6 +1132,8 @@ SeleniumSession <- R6::R6Class(
     #' @param name The name of the cookie.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -1001,16 +1149,20 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    delete_cookie = function(name, request_body = NULL) {
+    delete_cookie = function(name, request_body = NULL, timeout = 20) {
       check_string(name)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Delete Cookie", session_id = self$id, name = name)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Delete all cookies in the cookie store of the current document.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -1024,9 +1176,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    delete_all_cookies = function() {
+    delete_all_cookies = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Delete All Cookies", session_id = self$id)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
@@ -1038,6 +1192,8 @@ SeleniumSession <- R6::R6Class(
     #'   performing the actions.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -1057,15 +1213,17 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    perform_actions = function(actions, release_actions = TRUE, request_body = NULL) {
+    perform_actions = function(actions, release_actions = TRUE, request_body = NULL, timeout = 20) {
       check_class(actions, "selenium_actions_stream")
+
       check_bool(release_actions)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       actions <- unclass_stream(actions)
       req <- req_command(private$req, "Perform Actions", session_id = self$id)
       req <- req_body_selenium(req, list(actions = actions), request_body = request_body)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       if (release_actions) {
         self$release_actions()
       }
@@ -1074,6 +1232,9 @@ SeleniumSession <- R6::R6Class(
     #' @description
     #' Release all keys and pointers that were pressed using
     #' `perform_actions()`.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -1093,13 +1254,18 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    release_actions = function() {
+    release_actions = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Release Actions", session_id = self$id)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Dismiss the current alert, if present.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -1113,14 +1279,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    dismiss_alert = function() {
+    dismiss_alert = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Dismiss Alert", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Accept the current alert, if present.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -1134,14 +1305,19 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    accept_alert = function() {
+    accept_alert = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Accept Alert", session_id = self$id)
       req <- req_body_selenium(req, NULL)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Get the message of the current alert, if present.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The message of the current alert (a string).
     #'
@@ -1155,9 +1331,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    get_alert_text = function() {
+    get_alert_text = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Get Alert Text", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
@@ -1167,6 +1345,9 @@ SeleniumSession <- R6::R6Class(
     #' @param text The text to send.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The session object, invisibly.
     #'
@@ -1180,17 +1361,22 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    send_alert_text = function(text, request_body = NULL) {
+    send_alert_text = function(text, request_body = NULL, timeout = 20) {
       check_string(text)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
+
 
       req <- req_command(private$req, "Send Alert Text", session_id = self$id)
       req <- req_body_selenium(req, list(text = text), request_body = request_body)
-      req_perform_selenium(req, verbose = private$verbose)
+      req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       invisible(self)
     },
     #' @description
     #' Take a screenshot of the current page.
+    #'
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The base64-encoded PNG screenshot, as a string.
     #'
@@ -1204,9 +1390,11 @@ SeleniumSession <- R6::R6Class(
     #'
     #' session$close()
     #' }
-    screenshot = function() {
+    screenshot = function(timeout = 20) {
+      check_number_decimal(timeout, allow_null = TRUE)
+
       req <- req_command(private$req, "Take Screenshot", session_id = self$id)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     },
     #' @description
@@ -1229,6 +1417,8 @@ SeleniumSession <- R6::R6Class(
     #' @param page_ranges A list of page ranges (e.g. `"1"`, `"1-3"`) to print.
     #' @param request_body A list of request body parameters to pass to the
     #'   Selenium server, overriding the default body of the web request
+    #' @param timeout How long to wait for a request to recieve a response
+    #'   before throwing an error.
     #'
     #' @return The base64-encoded PDF, as a string.
     #'
@@ -1252,12 +1442,14 @@ SeleniumSession <- R6::R6Class(
                           header = NULL,
                           shrink_to_fit = NULL,
                           page_ranges = NULL,
-                          request_body = NULL) {
+                          request_body = NULL,
+                          timeout = 20) {
       orientation <- rlang::arg_match(orientation)
       check_number_decimal(scale, min = 0.1, max = 2)
       check_bool(background)
       check_number_decimal(width, min = 0, allow_null = TRUE)
       check_number_decimal(height, min = 0, allow_null = TRUE)
+
       if (is.list(margin)) {
         check_number_decimal(margin$left, allow_null = TRUE, min = 0)
         check_number_decimal(margin$right, allow_null = TRUE, min = 0)
@@ -1274,9 +1466,11 @@ SeleniumSession <- R6::R6Class(
       } else {
         check_number_decimal(margin, allow_null = TRUE, min = 0)
       }
+
       check_bool(shrink_to_fit, allow_null = TRUE)
       check_list(page_ranges, allow_null = TRUE)
       check_list(request_body, allow_null = TRUE)
+      check_number_decimal(timeout, allow_null = TRUE)
 
       req <- req_command(private$req, "Print Page", session_id = self$id)
 
@@ -1309,7 +1503,7 @@ SeleniumSession <- R6::R6Class(
       ))
 
       req <- req_body_selenium(req, body, request_body = request_body)
-      response <- req_perform_selenium(req, verbose = private$verbose)
+      response <- req_perform_selenium(req, verbose = private$verbose, timeout = timeout)
       httr2::resp_body_json(response)$value
     }
   ),

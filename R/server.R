@@ -1,3 +1,21 @@
+# Store the latest version name in an environment, that will persist until
+# the R session is closed.
+selenium <- rlang::new_environment()
+
+get_selenium_env <- function() {
+  utils::getFromNamespace("selenium", ns = "selenium")
+}
+
+get_from_env <- function(items) {
+  sel_env <- get_selenium_env()
+  env_get(sel_env, items, default = NULL)
+}
+
+set_in_env <- function(...) {
+  sel_env <- get_selenium_env()
+  env_bind(sel_env, ...)
+}
+
 #' Download and start the Selenium server.
 #'
 #' @description
@@ -14,14 +32,15 @@
 #'   will be prompted to confirm that you want to download it, and the function
 #'   will error if [rlang::is_interactive()] returns `FALSE`. To allow this
 #'   function to work in a non-interactive setting, set this to `FALSE`.
+#' @param verbose Passed into [utils::download.file()]. Note that setting this
+#'   to `FALSE` will *not* disable the prompt if a file needs to be downloaded.
 #' @param temp Whether to use a temporary directory to download the Selenium
 #'   Server `.jar` file. This will ensure that the file is deleted after it is
 #'   used, but means that you will have to redownload the file with every new
 #'   R session. If `FALSE`, the file is saved in your user data directory.
 #' @param path The path where the downloaded Selenium Server `.jar` file will
 #'   be saved. Overrides `temp`.
-#' @param echo_cmd,stdout,stderr Passed into
-#'   [processx::process$new()][processx::process].
+#' @param echo_cmd Passed into [processx::process$new()][processx::process].
 #' @param extra_args A character vector of extra arguments to pass into the
 #'   Selenium Server call.
 #'
@@ -41,15 +60,17 @@
 selenium_server <- function(version = "latest",
                             selenium_manager = TRUE,
                             interactive = TRUE,
+                            verbose = TRUE,
                             temp = TRUE,
                             path = NULL,
                             echo_cmd = FALSE,
-                            stdout = NULL,
-                            stderr = NULL,
                             extra_args = c()) {
   check_string(version)
   check_bool(selenium_manager)
   check_bool(interactive)
+  check_bool(verbose)
+  check_bool(temp)
+  check_string(path, allow_null = TRUE)
   check_bool(echo_cmd)
   check_character(extra_args, allow_null = TRUE)
 
@@ -133,7 +154,7 @@ selenium_server <- function(version = "latest",
   }
 
   if (!file.exists(full_path)) {
-    download_server(full_path, file_name, release_name)
+    download_server(full_path, file_name, release_name, verbose)
   }
 
   args <- c("-jar", full_path, "standalone")
@@ -147,22 +168,49 @@ selenium_server <- function(version = "latest",
     java_check(),
     args = args,
     echo_cmd = echo_cmd,
-    stdout = stdout,
-    stderr = stderr,
+    stdout = "|",
+    stderr = "|",
     supervise = TRUE
   )
 }
 
-download_server <- function(path, file, name) {
-  url <- paste0("https://github.com/SeleniumHQ/selenium/releases/download/", name, "/", file)
+download_server <- function(path, file, name, verbose) {
+  url <- paste0(
+    "https://github.com/SeleniumHQ/selenium/releases/download/",
+    name,
+    "/",
+    file
+  )
 
-  utils::download.file(url, path)
+  utils::download.file(url, path, quiet = !verbose)
   file
 }
 
 get_latest_version_name <- function(page = 1) {
+  sel_env <- get_selenium_env()
+
+  stored_name <- get_from_env("latest_version_name")
+  if (!is.null(stored_name)) {
+    return(stored_name)
+  }
+
   req <- httr2::request("https://api.github.com/repos/seleniumHQ/selenium/tags")
   req <- httr2::req_headers(req, "Accept" = "application/vnd.github.v3+json")
+
+  token <- if (is_installed("gitcreds")) {
+    tryCatch(
+      gitcreds::gitcreds_get(),
+      error = function(e) NULL
+    )
+  } else {
+    NULL
+  }
+
+  if (!is.null(token)) {
+    token <- paste("token", token$password)
+    req <- httr2::req_headers(req, Authorization = token)
+  }
+
   req <- httr2::req_url_query(req, per_page = 100, page = page)
   response <- httr2::req_perform(req)
   releases <- httr2::resp_body_json(response)
@@ -172,6 +220,8 @@ get_latest_version_name <- function(page = 1) {
   if (is.null(latest_tag)) {
     get_latest_version_name(page = page + 1)
   }
+
+  set_in_env(latest_version_name = latest_tag$name)
 
   latest_tag$name
 }
