@@ -39,7 +39,8 @@ To do this you must:
 
 - Install a browser that you want to automate (e.g. Chrome, Firefox,
   Edge).
-- Download [Java](https://www.java.com/).
+- Download [Java](https://www.oracle.com/java/technologies/downloads/)
+  (you need Java 11 or higher).
 
 There are many different ways to download and start the server, one of
 which is provided by selenium:
@@ -87,13 +88,31 @@ There are a few other ways of starting Selenium Server:
   `wdman::selenium()`. Note that at the time of writing, this package
   does not work with the latest version of Chrome.
 
-## Starting the client
+## Waiting for the server to be online
 
-Once a server instance has started, move to R and load selenium.
+The Selenium server won’t be ready to be used immediately. If you used
+`selenium_server()` to create your server, you can pass it into
+`wait_for_server()`:
 
 ``` r
-library(selenium)
+wait_for_server(server)
 ```
+
+You can also use `server$read_output()` and `server$read_error()`
+
+If you used a different method to create your server, use
+`wait_for_selenium_available()` instead.
+
+``` r
+wait_for_selenium_available()
+```
+
+If any point in this process produces an error or doesn’t work, please
+see the [Debugging
+Selenium](https://ashbythorpe.github.io/selenium-r/articles/debugging.html)
+article for more information.
+
+## Starting the client
 
 Client sessions can be started using `SeleniumSession$new()`
 
@@ -124,15 +143,12 @@ session <- SeleniumSession$new(
 )
 ```
 
-If this doesn’t work, please see the [Debugging
-Selenium](https://ashbythorpe.github.io/selenium-r/articles/debugging.html)
-article for more information.
-
 ## Usage
 
 Once the session has been successfully started, you can use the session
 object to control the browser. Here, we dynamically navigate through the
-R project homepage.
+R project homepage. Remember to close the session and the server process
+when you are done.
 
 ``` r
 session$navigate("https://www.r-project.org/")
@@ -150,6 +166,10 @@ session$
 #> [1] ""
 
 session$close()
+```
+
+``` r
+server$kill()
 ```
 
 For a more detailed introduction to using selenium, see the [Getting
