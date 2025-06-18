@@ -1,3 +1,17 @@
+# selenium 0.2.0
+
+- `JAVA_HOME` is now respected when finding the `java` executable.
+- `selenium_server()` now returns a `SeleniumServer` object, which exposes the
+  `host` and `port` fields. This allows `wait_for_server()` to work without
+  having to pass in the `host` and `port` arguments.
+- `selenium_server()` no longer saves the logs of the Selenium server process
+  by default, as this would cause errors when creating lots of sessions. To
+  enable logging, set the `stdout` and `stderr` arguments to `"|"`, and then
+  use `$read_output()` and `$read_error()` to read the output/error, as before.
+- `SeleniumSession$close()` no longer throws an error if you use it twice.
+  Instead, it returns a boolean that indicates if the session was already
+  closed.
+
 # selenium 0.1.4
 
 - Added `chrome_options()`, `firefox_options()` and `edge_options()` to help

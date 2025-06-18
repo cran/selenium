@@ -18,10 +18,9 @@
 #' running.
 #'
 #' @param server The process object returned by [selenium_server()].
-#' @param port The port that the Selenium server is using, so we can
-#'   connect to it.
 #' @param host The host that the Selenium server is running on. This is
 #'   usually 'localhost' (i.e. Your own machine).
+#' @param port The port that the Selenium server is using.
 #' @param max_time The amount of time to wait for the Selenium server to
 #'   become available.
 #' @param error Whether to throw an error if the web request fails
@@ -29,7 +28,7 @@
 #'   `FALSE` is returned.
 #' @param verbose Whether to print information about the web request that is
 #'   sent.
-#' @param timeout How long to wait for a request to recieve a response before
+#' @param timeout How long to wait for a request to receive a response before
 #'   throwing an error.
 #'
 #' @returns
@@ -63,8 +62,6 @@
 #'
 #' @export
 wait_for_server <- function(server,
-                            port = 4444L,
-                            host = "localhost",
                             max_time = 60,
                             error = TRUE,
                             verbose = FALSE,
@@ -75,9 +72,15 @@ wait_for_server <- function(server,
   check_bool(verbose)
   check_bool(error)
 
-  result <- wait_for_status(max_time, port, host, verbose, timeout)
+  result <- wait_for_status(
+    max_time,
+    host = server$host,
+    port = server$port,
+    verbose = verbose,
+    timeout = timeout
+  )
 
-  if (result) {
+  if (isTRUE(result)) {
     return(TRUE)
   }
 
@@ -85,14 +88,6 @@ wait_for_server <- function(server,
     base_message <- "Timed out waiting for selenium server to start"
 
     parent <- if (rlang::is_error(result)) result else NULL
-
-    server_error <- server$read_error()
-    if (!identical(server_error, "")) {
-      base_message <- c(
-        base_message,
-        "i" = paste0("Server error: ", server_error)
-      )
-    }
 
     rlang::abort(base_message, parent = parent)
   }
@@ -119,8 +114,8 @@ selenium_server_available <- function(port = 4444L, host = "localhost", verbose 
 #'
 #' @export
 wait_for_selenium_available <- function(max_time = 60,
-                                        port = 4444L,
                                         host = "localhost",
+                                        port = 4444L,
                                         error = TRUE,
                                         verbose = FALSE,
                                         timeout = 20) {
@@ -130,31 +125,31 @@ wait_for_selenium_available <- function(max_time = 60,
   check_bool(verbose)
   check_bool(error)
 
-  result <- wait_for_status(max_time, port, host, verbose, timeout)
+  result <- wait_for_status(max_time, host, port, verbose, timeout)
 
-  if (result) {
+  if (isTRUE(result)) {
     return(TRUE)
   }
 
   if (error) {
     parent <- if (rlang::is_error(result)) result else NULL
 
-    rlang::abort("Timed out waiting for selenium server to start", parent = result)
+    rlang::abort("Timed out waiting for selenium server to start", parent = parent)
   }
 
   FALSE
 }
 
 
-wait_for_status <- function(max_time, port, host, verbose, timeout) {
+wait_for_status <- function(max_time, host, port, verbose, timeout) {
   end <- Sys.time() + timeout
 
   result <- rlang::try_fetch(
-    get_server_status(port = port, host = host, verbose = verbose, timeout = timeout),
+    get_server_status(host = host, port = port, verbose = verbose, timeout = timeout),
     error = identity
   )
 
-  if (isTRUE(result$ready)) {
+  if (!rlang::is_error(result) && isTRUE(result$ready)) {
     return(TRUE)
   }
 
@@ -164,9 +159,13 @@ wait_for_status <- function(max_time, port, host, verbose, timeout) {
       error = identity
     )
 
-    if (isTRUE(result$ready)) {
+    if (!rlang::is_error(result) && isTRUE(result$ready)) {
       return(TRUE)
     }
+  }
+
+  if (rlang::is_error(result)) {
+    return(result)
   }
 
   FALSE
@@ -181,7 +180,7 @@ get_status <- function(req, verbose = FALSE, timeout = 20) {
 #' @rdname wait_for_server
 #'
 #' @export
-get_server_status <- function(port = 4444L, host = "localhost", verbose = FALSE, timeout = 20) {
+get_server_status <- function(host = "localhost", port = 4444L, verbose = FALSE, timeout = 20) {
   check_number_whole(port)
   check_string(host)
   check_bool(verbose)
